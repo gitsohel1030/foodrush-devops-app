@@ -1,0 +1,135 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_REGION      = 'us-east-1'
+        ECR_REGISTRY    = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        IMAGE_TAG       = "${env.GIT_COMMIT[0..7]}"
+        NAMESPACE       = 'foodrush'
+        SERVICES        = 'user-service restaurant-service order-service frontend'
+    }
+
+    stages {
+
+        stage('📥 Checkout') {
+            steps {
+                checkout scm
+                echo "Branch: ${env.BRANCH_NAME} | Commit: ${env.GIT_COMMIT}"
+            }
+        }
+
+        stage('🔍 Code Quality') {
+            parallel {
+                stage('Lint Python') {
+                    steps {
+                        sh '''
+                            pip install flake8 --quiet
+                            flake8 user-service/ restaurant-service/ order-service/ --max-line-length=120 --ignore=E501
+                        '''
+                    }
+                }
+                stage('Security Scan') {
+                    steps {
+                        sh '''
+                            pip install bandit --quiet
+                            bandit -r user-service/ restaurant-service/ order-service/ -ll || true
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('🐳 Build Docker Images') {
+            steps {
+                script {
+                    sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}"
+                    SERVICES.split().each { service ->
+                        sh """
+                            docker build -t ${ECR_REGISTRY}/foodrush-${service}:${IMAGE_TAG} \
+                                         -t ${ECR_REGISTRY}/foodrush-${service}:latest \
+                                         ./${service}
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('🔐 Image Security Scan') {
+            steps {
+                script {
+                    SERVICES.split().each { service ->
+                        sh "trivy image --exit-code 0 --severity HIGH,CRITICAL ${ECR_REGISTRY}/foodrush-${service}:${IMAGE_TAG} || true"
+                    }
+                }
+            }
+        }
+
+        stage('📤 Push to ECR') {
+            steps {
+                script {
+                    SERVICES.split().each { service ->
+                        sh """
+                            docker push ${ECR_REGISTRY}/foodrush-${service}:${IMAGE_TAG}
+                            docker push ${ECR_REGISTRY}/foodrush-${service}:latest
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('🚀 Deploy to EKS') {
+            steps {
+                withCredentials([file(credentialsId: 'eks-kubeconfig', variable: 'KUBECONFIG')]) {
+                    sh """
+                        # Update image tags in manifests
+                        sed -i 's|YOUR_ECR_REPO|${ECR_REGISTRY}|g' k8s/*.yaml
+                        sed -i 's|:latest|:${IMAGE_TAG}|g' k8s/03-services.yaml k8s/04-frontend.yaml
+
+                        # Apply manifests
+                        kubectl apply -f k8s/00-namespace.yaml
+                        kubectl apply -f k8s/01-config.yaml
+                        kubectl apply -f k8s/02-databases.yaml
+                        kubectl apply -f k8s/03-services.yaml
+                        kubectl apply -f k8s/04-frontend.yaml
+                        kubectl apply -f k8s/05-ingress.yaml
+
+                        # Wait for rollout
+                        kubectl rollout status deployment/user-service -n ${NAMESPACE} --timeout=120s
+                        kubectl rollout status deployment/restaurant-service -n ${NAMESPACE} --timeout=120s
+                        kubectl rollout status deployment/order-service -n ${NAMESPACE} --timeout=120s
+                        kubectl rollout status deployment/frontend -n ${NAMESPACE} --timeout=120s
+                    """
+                }
+            }
+        }
+
+        stage('✅ Verify Deployment') {
+            steps {
+                withCredentials([file(credentialsId: 'eks-kubeconfig', variable: 'KUBECONFIG')]) {
+                    sh """
+                        echo "=== Pods ==="
+                        kubectl get pods -n ${NAMESPACE}
+                        echo "=== Services ==="
+                        kubectl get svc -n ${NAMESPACE}
+                        echo "=== HPA ==="
+                        kubectl get hpa -n ${NAMESPACE}
+                        echo "=== Ingress ==="
+                        kubectl get ingress -n ${NAMESPACE}
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ FoodRush deployed successfully! Tag: ${IMAGE_TAG}"
+        }
+        failure {
+            echo "❌ Pipeline failed at: ${env.STAGE_NAME}"
+        }
+        always {
+            sh 'docker system prune -f || true'
+        }
+    }
+}
