@@ -1,0 +1,276 @@
+name: FoodRush CI - Build & Push to ECR
+ 
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'foodrush/user-service/**'
+      - 'foodrush/restaurant-service/**'
+      - 'foodrush/order-service/**'
+      - 'foodrush/frontend/**'
+  workflow_dispatch:
+ 
+env:
+  AWS_REGION: ap-south-1
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-south-1.amazonaws.com
+  IMAGE_TAG: ${{ github.sha }}
+  ROLE_ARN: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/my-eks-cluster-1030-github-actions
+ 
+jobs:
+# ──────────────────────────────────────────────────────────
+# JOB 1: Detect which services have changed
+# ──────────────────────────────────────────────────────────
+  detect-changes:
+    name: Detect Changed Services
+    runs-on: ubuntu-latest
+    outputs:
+      user-service: ${{ steps.filter.outputs.user-service }}
+      restaurant-service: ${{ steps.filter.outputs.restaurant-service }}
+      order-service: ${{ steps.filter.outputs.order-service }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+ 
+      - name: Detect changed paths
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            user-service:
+              - 'foodrush/user-service/**'
+            restaurant-service:
+              - 'foodrush/restaurant-service/**'
+            order-service:
+              - 'foodrush/order-service/**'
+            frontend:
+              - 'foodrush/frontend/**'
+ 
+# ──────────────────────────────────────────────────────────
+# JOB 2a: Build & Push user-service
+# ──────────────────────────────────────────────────────────
+  build-user-service:
+    name: Build user-service
+    needs: detect-changes
+    if: needs.detect-changes.outputs.user-service == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # required for OIDC
+      contents: read
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+ 
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+ 
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+ 
+      - name: Build and push user-service image
+        run: |
+          docker build \
+            -t ${{ env.ECR_REGISTRY }}/foodrush-user-service:${{ env.IMAGE_TAG }} \
+            -t ${{ env.ECR_REGISTRY }}/foodrush-user-service:latest \
+            ./foodrush/user-service
+          docker push ${{ env.ECR_REGISTRY }}/foodrush-user-service:${{ env.IMAGE_TAG }}
+          docker push ${{ env.ECR_REGISTRY }}/foodrush-user-service:latest
+ 
+# ──────────────────────────────────────────────────────────
+# JOB 2b: Build & Push restaurant-service
+# ──────────────────────────────────────────────────────────
+  build-restaurant-service:
+    name: Build restaurant-service
+    needs: detect-changes
+    if: needs.detect-changes.outputs.restaurant-service == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+ 
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+ 
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+ 
+      - name: Build and push restaurant-service image
+        run: |
+          docker build \
+            -t ${{ env.ECR_REGISTRY }}/foodrush-restaurant-service:${{ env.IMAGE_TAG }} \
+            -t ${{ env.ECR_REGISTRY }}/foodrush-restaurant-service:latest \
+            ./foodrush/restaurant-service
+          docker push ${{ env.ECR_REGISTRY }}/foodrush-restaurant-service:${{ env.IMAGE_TAG }}
+          docker push ${{ env.ECR_REGISTRY }}/foodrush-restaurant-service:latest
+ 
+# ──────────────────────────────────────────────────────────
+# JOB 2c: Build & Push order-service
+# ──────────────────────────────────────────────────────────
+  build-order-service:
+    name: Build order-service
+    needs: detect-changes
+    if: needs.detect-changes.outputs.order-service == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+ 
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+ 
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+ 
+      - name: Build and push order-service image
+        run: |
+          docker build \
+            -t ${{ env.ECR_REGISTRY }}/foodrush-order-service:${{ env.IMAGE_TAG }} \
+            -t ${{ env.ECR_REGISTRY }}/foodrush-order-service:latest \
+            ./foodrush/order-service
+          docker push ${{ env.ECR_REGISTRY }}/foodrush-order-service:${{ env.IMAGE_TAG }}
+          docker push ${{ env.ECR_REGISTRY }}/foodrush-order-service:latest
+ 
+# ──────────────────────────────────────────────────────────
+# JOB 2d: Build & Push frontend
+# ──────────────────────────────────────────────────────────
+  build-frontend:
+    name: Build frontend
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+ 
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+ 
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+ 
+      - name: Build and push frontend image
+        run: |
+          docker build \
+            -t ${{ env.ECR_REGISTRY }}/foodrush-frontend:${{ env.IMAGE_TAG }} \
+            -t ${{ env.ECR_REGISTRY }}/foodrush-frontend:latest \
+            ./foodrush/frontend
+          docker push ${{ env.ECR_REGISTRY }}/foodrush-frontend:${{ env.IMAGE_TAG }}
+          docker push ${{ env.ECR_REGISTRY }}/foodrush-frontend:latest
+ 
+# ──────────────────────────────────────────────────────────
+# JOB 3: Update GitOps repo with new image tags
+# ──────────────────────────────────────────────────────────
+  update-gitops:
+    name: Update GitOps Image Tags
+    runs-on: ubuntu-latest
+    needs:
+      - detect-changes
+      - build-user-service
+      - build-restaurant-service
+      - build-order-service
+      - build-frontend
+    if: |
+      always() &&
+      (
+        needs.build-user-service.result == 'success' ||
+        needs.build-restaurant-service.result == 'success' ||
+        needs.build-order-service.result == 'success' ||
+        needs.build-frontend.result == 'success'
+      )
+    permissions:
+      contents: read        # no id-token needed — uses GITOPS_TOKEN not AWS
+    steps:
+      - name: Checkout GitOps repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ secrets.GITOPS_REPO }}
+          token: ${{ secrets.GITOPS_TOKEN }}
+          path: gitops
+ 
+      - name: Update image tags in manifests
+        env:
+          ECR_REGISTRY: ${{ env.ECR_REGISTRY }}
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
+          USER_CHANGED: ${{ needs.detect-changes.outputs.user-service }}
+          RESTAURANT_CHANGED: ${{ needs.detect-changes.outputs.restaurant-service }}
+          ORDER_CHANGED: ${{ needs.detect-changes.outputs.order-service }}
+          FRONTEND_CHANGED: ${{ needs.detect-changes.outputs.frontend }}
+        run: |
+          cd gitops
+ 
+          if [ "$USER_CHANGED" = "true" ]; then
+            echo "Updating user-service → $IMAGE_TAG"
+            sed -i "s|image: .*foodrush-user-service:.*|image: ${ECR_REGISTRY}/foodrush-user-service:${IMAGE_TAG}|g" \
+              k8s/foodrush/03-services.yaml
+          fi
+ 
+          if [ "$RESTAURANT_CHANGED" = "true" ]; then
+            echo "Updating restaurant-service → $IMAGE_TAG"
+            sed -i "s|image: .*foodrush-restaurant-service:.*|image: ${ECR_REGISTRY}/foodrush-restaurant-service:${IMAGE_TAG}|g" \
+              k8s/foodrush/03-services.yaml
+          fi
+ 
+          if [ "$ORDER_CHANGED" = "true" ]; then
+            echo "Updating order-service → $IMAGE_TAG"
+            sed -i "s|image: .*foodrush-order-service:.*|image: ${ECR_REGISTRY}/foodrush-order-service:${IMAGE_TAG}|g" \
+              k8s/foodrush/03-services.yaml
+          fi
+ 
+          if [ "$FRONTEND_CHANGED" = "true" ]; then
+            echo "Updating frontend → $IMAGE_TAG"
+            sed -i "s|image: .*foodrush-frontend:.*|image: ${ECR_REGISTRY}/foodrush-frontend:${IMAGE_TAG}|g" \
+              k8s/foodrush/04-frontend.yaml
+          fi
+ 
+      - name: Commit and push updated tags
+        run: |
+          cd gitops
+          git config user.name "gitsohel1030"
+          git config user.email "sohelmujawar172@gmail.com"
+ 
+          git add k8s/foodrush/03-services.yaml k8s/foodrush/04-frontend.yaml
+ 
+          if git diff --cached --quiet; then
+            echo "No manifest changes to commit — skipping."
+          else
+            git commit -m "ci: update foodrush image tags to ${IMAGE_TAG}
+ 
+          Changed services:$(
+            [ "${{ needs.detect-changes.outputs.user-service }}" = "true" ] && echo " user-service"
+            [ "${{ needs.detect-changes.outputs.restaurant-service }}" = "true" ] && echo " restaurant-service"
+            [ "${{ needs.detect-changes.outputs.order-service }}" = "true" ] && echo " order-service"
+            [ "${{ needs.detect-changes.outputs.frontend }}" = "true" ] && echo " frontend"
+          )
+          Triggered by: ${{ github.actor }} @ ${{ github.sha }}"
+            git push
+            echo "GitOps repo updated. ArgoCD will sync shortly."
+          fi
+ 
