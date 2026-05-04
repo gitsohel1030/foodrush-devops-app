@@ -1,5 +1,5 @@
 export const metadata = {
-  title: 'FoodRush 🍔 - Food that hits different',
+  title: 'FoodRush 🍔 - Food that hits different!!!!!',
   description: 'The freshest food delivery app. Order up bestie.',
 }
 
