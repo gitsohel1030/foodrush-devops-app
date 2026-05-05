@@ -1,6 +1,6 @@
 export const metadata = {
   title: 'FoodRush 🍔 - Food that hits different!!!',
-  description: 'The freshest food delivery app. Order up bestie.',
+  description: 'The freshest food delivery app. Order up besties.',
 }
 
 export default function RootLayout({ children }) {
