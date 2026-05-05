@@ -70,7 +70,7 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
-    return {"id": user.id, "name": user.name, "email": user.email, "message": "User registered successfully"}
+    return {"id": user.id, "name": user.name, "email": user.email, "message": "User registered successfully!!!"}
 
 @app.post("/api/users/login")
 def login(req: LoginRequest, db: Session = Depends(get_db)):

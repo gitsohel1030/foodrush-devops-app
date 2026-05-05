@@ -83,7 +83,7 @@ def place_order(req: PlaceOrderRequest, db: Session = Depends(get_db)):
         "status": order.status,
         "total": order.total_amount,
         "estimated_delivery": order.estimated_delivery,
-        "message": "Order placed successfully! 🎉"
+        "message": "Order placed successfully!!! 🎉"
     }
 
 @app.get("/api/orders/{order_id}")

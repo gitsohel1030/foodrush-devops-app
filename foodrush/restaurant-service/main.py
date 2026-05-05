@@ -110,7 +110,7 @@ def list_restaurants(db: Session = Depends(get_db)):
 def get_restaurant(restaurant_id: int, db: Session = Depends(get_db)):
     r = db.query(Restaurant).filter(Restaurant.id == restaurant_id).first()
     if not r:
-        raise HTTPException(status_code=404, detail="Restaurant not found")
+        raise HTTPException(status_code=404, detail="Restaurant not found!")
     return r
 
 @app.get("/api/restaurants/{restaurant_id}/menu")
